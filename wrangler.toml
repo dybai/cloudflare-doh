@@ -1,0 +1,7 @@
+name = "private-doh"
+main = "src/worker.js"
+compatibility_date = "2024-11-01"
+
+# 在控制台或 wrangler secret put DOH_AUTH_TOKEN 设置，勿把密钥写进仓库
+# [vars]
+# DOH_UPSTREAM_URL = "https://cloudflare-dns.com/dns-query"
