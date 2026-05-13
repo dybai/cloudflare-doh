@@ -14,6 +14,13 @@
 |------|------|------|
 | `DOH_AUTH_TOKEN` | **Secret**（必填） | 随机字符串，**至少 16 字符**。勿写入仓库或 `wrangler.toml`。 |
 | `DOH_UPSTREAM_URL` | 可选 **变量** | 上游 DoH 根地址，默认 `https://cloudflare-dns.com/dns-query`。可在 `wrangler.toml` 的 `[vars]` 或控制台「变量」中配置。 |
+| `DOH_CACHE_TTL` | 可选 **变量** | **GET** 查询在边缘缓存的秒数（仅缓存上游 **HTTP 200**）。默认 `120`，范围 `0`–`3600`；`0` 表示关闭。POST 不参与缓存。 |
+
+### 边缘缓存说明
+
+- 实现方式：对已鉴权的 **GET** 请求，对上游 `fetch` 使用 Workers 的 `cf.cacheTtlByStatus`，在 Cloudflare 边缘复用相同「上游 URL + 查询串」的应答，减轻延迟与上游压力。
+- **POST**（wire format）不按 URL 区分报文体，若强行用同一套边缘键容易错缓存，因此 **始终回源**。
+- 缓存时长为固定秒数，**未按 DNS 记录 TTL 动态调整**；若你解析变更频繁，可把 `DOH_CACHE_TTL` 调小或设为 `0`。
 
 ## 部署方法
 

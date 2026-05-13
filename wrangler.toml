@@ -5,3 +5,5 @@ compatibility_date = "2024-11-01"
 # 在控制台或 wrangler secret put DOH_AUTH_TOKEN 设置，勿把密钥写进仓库
 # [vars]
 # DOH_UPSTREAM_URL = "https://cloudflare-dns.com/dns-query"
+# GET 上游边缘缓存秒数（0 关闭），默认 120
+# DOH_CACHE_TTL = "120"

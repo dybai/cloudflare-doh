@@ -8,9 +8,23 @@
  *    https://<你的域名>/v1/<DOH_AUTH_TOKEN>/dns-query?dns=...
  *
  * 上游默认 Cloudflare 公共 DoH，可通过环境变量 DOH_UPSTREAM_URL 覆盖。
+ *
+ * 边缘缓存：对 GET 上游请求使用 Workers 子请求缓存（cf：cacheEverything +
+ * cacheTtlByStatus），相同上游 URL+查询串在 TTL 内命中边缘。POST 不缓存（避免仅按 URL
+ * 键控导致错答）。变量 DOH_CACHE_TTL 为秒数，默认 120，范围 0–3600；0 表示关闭。
  */
 
 const DEFAULT_UPSTREAM = 'https://cloudflare-dns.com/dns-query';
+const DEFAULT_CACHE_TTL_SEC = 120;
+const MAX_CACHE_TTL_SEC = 3600;
+
+function getEdgeCacheTtlSeconds(env) {
+	const raw = env.DOH_CACHE_TTL;
+	if (raw === undefined || raw === null || raw === '') return DEFAULT_CACHE_TTL_SEC;
+	const n = Number(raw);
+	if (!Number.isFinite(n)) return DEFAULT_CACHE_TTL_SEC;
+	return Math.min(Math.max(Math.floor(n), 0), MAX_CACHE_TTL_SEC);
+}
 
 function jsonError(status, message) {
 	return new Response(JSON.stringify({ error: message }), {
@@ -88,7 +102,19 @@ export default {
 			redirect: 'manual',
 		});
 
-		const res = await fetch(upstreamReq);
+		const cacheTtl = getEdgeCacheTtlSeconds(env);
+		const fetchOptions =
+			request.method === 'GET' && cacheTtl > 0
+				? {
+						cf: {
+							cacheEverything: true,
+							cacheTtl: 0,
+							cacheTtlByStatus: { '200': cacheTtl },
+						},
+					}
+				: {};
+
+		const res = await fetch(upstreamReq, fetchOptions);
 		const outHeaders = new Headers(res.headers);
 		outHeaders.delete('set-cookie');
 		return new Response(res.body, { status: res.status, headers: outHeaders });
