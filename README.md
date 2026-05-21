@@ -15,6 +15,23 @@
 | `DOH_AUTH_TOKEN` | **Secret**（必填） | 随机字符串，**至少 16 字符**。勿写入仓库或 `wrangler.toml`。 |
 | `DOH_UPSTREAM_URL` | 可选 **变量** | 上游 DoH 根地址，默认 `https://cloudflare-dns.com/dns-query`。可在 `wrangler.toml` 的 `[vars]` 或控制台「变量」中配置。 |
 | `DOH_CACHE_TTL` | 可选 **变量** | **GET** 查询在边缘缓存的秒数（仅缓存上游 **HTTP 200**）。默认 `120`，范围 `0`–`3600`；`0` 表示关闭。POST 不参与缓存。 |
+| `DOH_LOG_QUERIES` | 可选 **变量** | 为 `1`、`true`、`yes`、`on`（不区分大小写）时，将 DNS 查询参数写入 Workers 日志（`console.log`）；**默认关闭**。 |
+
+### 查询日志（`DOH_LOG_QUERIES`）
+
+开启后，每次通过鉴权的查询会在 Cloudflare 控制台 **Workers → 你的服务 → Logs**（或 `wrangler tail`）中看到一行 JSON，前缀为 `[doh] query`。
+
+- **GET**：记录 `name`、`type`、`dns` 等 URL 查询参数；`dns`（wire format）过长时会截断并标注总长度。
+- **POST**：记录 `Content-Type`、`Content-Length` 等；报文体为二进制 DNS 报文，不在日志中展开。
+- **路径**：`/v1/<token>/dns-query` 中的 token 在日志里显示为 `[redacted]`，避免密钥进日志。
+
+调试示例（`wrangler.toml` 的 `[vars]` 或控制台变量）：
+
+```toml
+DOH_LOG_QUERIES = "true"
+```
+
+生产环境建议保持关闭，以免日志量过大或泄露查询域名习惯。
 
 ### 边缘缓存说明
 

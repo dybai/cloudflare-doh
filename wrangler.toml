@@ -7,3 +7,5 @@ compatibility_date = "2024-11-01"
 # DOH_UPSTREAM_URL = "https://cloudflare-dns.com/dns-query"
 # GET 上游边缘缓存秒数（0 关闭），默认 120
 # DOH_CACHE_TTL = "120"
+# 打印 DNS 查询参数到 Workers 日志：1 / true / yes / on 开启，默认关闭
+# DOH_LOG_QUERIES = "true"

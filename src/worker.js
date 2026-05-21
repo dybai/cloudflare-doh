@@ -12,9 +12,12 @@
  * 边缘缓存：对 GET 上游请求使用 Workers 子请求缓存（cf：cacheEverything +
  * cacheTtlByStatus），相同上游 URL+查询串在 TTL 内命中边缘。POST 不缓存（避免仅按 URL
  * 键控导致错答）。变量 DOH_CACHE_TTL 为秒数，默认 120，范围 0–3600；0 表示关闭。
+ *
+ * 查询日志：DOH_LOG_QUERIES 为 1/true/yes/on 时在 console 打印 DNS 查询参数（默认关闭）。
  */
 
 const DEFAULT_UPSTREAM = 'https://cloudflare-dns.com/dns-query';
+const LOG_QUERY_TRUTHY = new Set(['1', 'true', 'yes', 'on']);
 const DEFAULT_CACHE_TTL_SEC = 120;
 const MAX_CACHE_TTL_SEC = 3600;
 
@@ -40,6 +43,62 @@ function stripHopByHopHeaders(src) {
 		if (allow.has(k.toLowerCase())) out.set(k, v);
 	}
 	return out;
+}
+
+function isQueryLogEnabled(env) {
+	const raw = env.DOH_LOG_QUERIES;
+	if (raw === undefined || raw === null || raw === '') return false;
+	return LOG_QUERY_TRUTHY.has(String(raw).trim().toLowerCase());
+}
+
+/** 日志用路径：/v1/<token>/dns-query 中的 token 脱敏 */
+function redactPathnameForLog(pathname) {
+	const parts = pathname.split('/').filter(Boolean);
+	if (parts.length === 3 && parts[0] === 'v1' && parts[2] === 'dns-query') {
+		return '/v1/[redacted]/dns-query';
+	}
+	return pathname;
+}
+
+function summarizeDnsParam(value, maxLen = 80) {
+	if (value.length <= maxLen) return value;
+	return `${value.slice(0, maxLen)}…(${value.length} chars)`;
+}
+
+function collectDnsQueryParams(search) {
+	if (!search) return {};
+	const params = {};
+	for (const [key, value] of new URLSearchParams(search)) {
+		if (key === 'dns') {
+			params.dns = summarizeDnsParam(value);
+		} else {
+			params[key] = value;
+		}
+	}
+	return params;
+}
+
+function logDnsQuery(request, pathname) {
+	const accept = request.headers.get('Accept') ?? '';
+	const contentType = request.headers.get('Content-Type') ?? '';
+	const contentLength = request.headers.get('Content-Length') ?? '';
+
+	const entry = {
+		method: request.method,
+		path: redactPathnameForLog(pathname),
+		accept: accept || undefined,
+	};
+
+	if (request.method === 'GET') {
+		const query = collectDnsQueryParams(new URL(request.url).search);
+		if (Object.keys(query).length > 0) entry.query = query;
+	} else if (request.method === 'POST') {
+		entry.contentType = contentType || undefined;
+		entry.contentLength = contentLength || undefined;
+		entry.note = 'POST body is DNS wire format; see Workers log or packet capture for raw bytes';
+	}
+
+	console.log('[doh] query', JSON.stringify(entry));
 }
 
 export default {
@@ -89,6 +148,10 @@ export default {
 			}
 		} else {
 			return new Response('Not Found', { status: 404 });
+		}
+
+		if (isQueryLogEnabled(env)) {
+			logDnsQuery(request, pathname);
 		}
 
 		const upstreamBase = (env.DOH_UPSTREAM_URL || DEFAULT_UPSTREAM).replace(/\/+$/, '');
